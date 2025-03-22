@@ -9,6 +9,7 @@ export interface NodeData {
   size?: 'small' | 'medium' | 'large';
   importance?: number;
   metadata?: Record<string, any>;
+  entityType?: 'concept' | 'event' | 'person' | 'document' | 'place' | 'date';
   [key: string]: any; // Add index signature to satisfy Record<string, unknown>
 }
 
@@ -62,3 +63,6 @@ export interface HistoricalTextInput {
   context?: string;
   era?: string;
 }
+
+// Import the NodeProps type to fix our type issues
+export type { NodeProps, Edge as FlowEdge } from '@xyflow/react';

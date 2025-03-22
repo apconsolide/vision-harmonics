@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { 
   ReactFlow, 
@@ -10,6 +9,8 @@ import {
   Panel,
   MarkerType,
   useReactFlow,
+  Node,
+  Edge as FlowEdge,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -35,31 +36,40 @@ import { useForm } from 'react-hook-form';
 
 const nodeColor = (node: any) => {
   const data = node.data as NodeData;
-  switch (data.category) {
-    case 'primary':
+  switch (data.entityType) {
+    case 'concept':
       return '#4C6EF5';
-    case 'secondary':
-      return '#5CBBF6';
-    case 'tertiary':
+    case 'document':
       return '#7950F2';
-    case 'quaternary':
-      return '#F783AC';
-    case 'success':
-      return '#40C057';
-    case 'warning':
-      return '#FAAE42';
-    case 'danger':
-      return '#FA5252';
-    case 'info':
-      return '#22B8CF';
     case 'event':
       return '#f59e0b';
     case 'person':
       return '#3b82f6';
     case 'place':
       return '#10b981';
+    case 'date':
+      return '#d946ef';
     default:
-      return '#E9ECEF';
+      switch (data.category) {
+        case 'primary':
+          return '#4C6EF5';
+        case 'secondary':
+          return '#5CBBF6';
+        case 'tertiary':
+          return '#7950F2';
+        case 'quaternary':
+          return '#F783AC';
+        case 'success':
+          return '#40C057';
+        case 'warning':
+          return '#FAAE42';
+        case 'danger':
+          return '#FA5252';
+        case 'info':
+          return '#22B8CF';
+        default:
+          return '#E9ECEF';
+      }
   }
 };
 
@@ -237,7 +247,7 @@ const Visualizer: React.FC = () => {
           });
           
           // Create chronological connections
-          const timelineEdges: Edge[] = [];
+          const timelineEdges: FlowEdge[] = [];
           for (let i = 0; i < sortedNodes.length - 1; i++) {
             timelineEdges.push({
               id: `timeline-${sortedNodes[i].id}-${sortedNodes[i+1].id}`,
@@ -289,17 +299,24 @@ const Visualizer: React.FC = () => {
   
   const handleCreateNode = useCallback(() => {
     const id = `node-${nodes.length + 1}`;
+    
+    // Map category to appropriate node type
+    let nodeType = 'concept';
+    if (['event', 'person', 'document', 'place', 'date'].includes(newNodeData.category)) {
+      nodeType = newNodeData.category;
+    }
+    
     const newNode = {
       id,
-      type: newNodeData.category === 'event' ? 'event' : 
-            newNodeData.category === 'person' ? 'person' : 'concept',
+      type: nodeType,
       position: {
         x: Math.random() * 800 - 400,
         y: Math.random() * 600 - 300,
       },
       data: {
         ...newNodeData,
-        id
+        id,
+        entityType: nodeType
       },
     };
     
@@ -506,7 +523,7 @@ const Visualizer: React.FC = () => {
       if (!historicalData.events) return;
       
       const generatedNodes: Node[] = [];
-      const generatedEdges: Edge[] = [];
+      const generatedEdges: FlowEdge[] = [];
       
       // Create timeline nodes
       if (historicalData.timelines) {
@@ -753,7 +770,7 @@ const Visualizer: React.FC = () => {
           <DialogHeader>
             <DialogTitle>Create New Node</DialogTitle>
             <DialogDescription>
-              Add a new concept to your visualization.
+              Add a new entity to your visualization.
             </DialogDescription>
           </DialogHeader>
           
@@ -780,26 +797,24 @@ const Visualizer: React.FC = () => {
             
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="node-category">Category</Label>
+                <Label htmlFor="node-category">Entity Type</Label>
                 <Select 
                   value={newNodeData.category}
                   onValueChange={(value) => setNewNodeData({ ...newNodeData, category: value })}
                 >
                   <SelectTrigger id="node-category">
-                    <SelectValue placeholder="Select a category" />
+                    <SelectValue placeholder="Select entity type" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="concept">Concept</SelectItem>
+                    <SelectItem value="event">Event</SelectItem>
+                    <SelectItem value="person">Person</SelectItem>
+                    <SelectItem value="document">Document</SelectItem>
+                    <SelectItem value="place">Place</SelectItem>
+                    <SelectItem value="date">Date</SelectItem>
                     <SelectItem value="primary">Primary</SelectItem>
                     <SelectItem value="secondary">Secondary</SelectItem>
                     <SelectItem value="tertiary">Tertiary</SelectItem>
-                    <SelectItem value="quaternary">Quaternary</SelectItem>
-                    <SelectItem value="success">Success</SelectItem>
-                    <SelectItem value="warning">Warning</SelectItem>
-                    <SelectItem value="danger">Danger</SelectItem>
-                    <SelectItem value="info">Info</SelectItem>
-                    <SelectItem value="event">Event</SelectItem>
-                    <SelectItem value="person">Person</SelectItem>
-                    <SelectItem value="place">Place</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -822,7 +837,7 @@ const Visualizer: React.FC = () => {
               </div>
             </div>
             
-            {newNodeData.category === 'event' && (
+            {(newNodeData.category === 'event' || newNodeData.category === 'date') && (
               <div className="space-y-2">
                 <Label htmlFor="node-date">Date (Optional)</Label>
                 <Input 
@@ -836,6 +851,23 @@ const Visualizer: React.FC = () => {
                     }
                   })}
                   placeholder="Select date"
+                />
+              </div>
+            )}
+            
+            {newNodeData.category === 'place' && (
+              <div className="space-y-2">
+                <Label htmlFor="node-location">Location (Optional)</Label>
+                <Input 
+                  id="node-location"
+                  onChange={(e) => setNewNodeData({
+                    ...newNodeData,
+                    metadata: {
+                      ...newNodeData.metadata,
+                      location: e.target.value
+                    }
+                  })}
+                  placeholder="Enter location details"
                 />
               </div>
             )}
