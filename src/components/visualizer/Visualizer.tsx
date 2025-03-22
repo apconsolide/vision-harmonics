@@ -13,6 +13,8 @@ import {
   Edge as FlowEdge,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { toPng } from 'html-to-image';
+import { jsPDF } from 'jspdf';
 
 import { nodeTypes } from './NodeTypes';
 import { edgeTypes } from './EdgeTypes';
@@ -29,7 +31,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Search, FileText } from 'lucide-react';
+import { Loader2, Search, FileText, Download } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useForm } from 'react-hook-form';
@@ -81,6 +83,16 @@ const Visualizer: React.FC = () => {
   const [selectedNode, setSelectedNode] = useState<any | null>(null);
   const [nodeDialogOpen, setNodeDialogOpen] = useState(false);
   const [textInputDialogOpen, setTextInputDialogOpen] = useState(false);
+  const [pdfExportDialogOpen, setPdfExportDialogOpen] = useState(false);
+  const [pdfExportSettings, setPdfExportSettings] = useState({
+    title: '',
+    format: 'a4',
+    orientation: 'landscape',
+    quality: 'high',
+    includeMetadata: true,
+    includeTimestamp: true,
+  });
+  const [exportLoading, setExportLoading] = useState(false);
   const [newNodeData, setNewNodeData] = useState<NodeData>({
     label: '',
     category: 'primary',
@@ -349,7 +361,7 @@ const Visualizer: React.FC = () => {
     }
   }, [toast]);
   
-  // Export visualization
+  // Export visualization as JSON
   const exportVisualization = useCallback(() => {
     const dataStr = JSON.stringify({ nodes, edges });
     const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
@@ -366,6 +378,147 @@ const Visualizer: React.FC = () => {
       description: "Your visualization has been exported as JSON.",
     });
   }, [nodes, edges, toast]);
+  
+  // Export visualization as high-quality PDF
+  const exportVisualizationAsPDF = useCallback(() => {
+    setPdfExportDialogOpen(true);
+  }, []);
+  
+  const handlePdfExport = useCallback(async () => {
+    if (!reactFlowWrapper.current) return;
+    
+    setExportLoading(true);
+    
+    try {
+      // First center the view to ensure all elements are visible
+      reactFlowInstance.fitView({ padding: 0.2 });
+      
+      // Wait a bit for the view to adjust
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Get the react-flow container
+      const flowContainer = reactFlowWrapper.current.querySelector('.react-flow');
+      if (!flowContainer) throw new Error('Could not find React Flow container');
+      
+      // Determine quality settings
+      const quality = pdfExportSettings.quality === 'high' ? 3 : 
+                      pdfExportSettings.quality === 'medium' ? 2 : 1;
+      
+      // Create high-quality PNG with html-to-image
+      const dataUrl = await toPng(flowContainer as HTMLElement, {
+        backgroundColor: darkMode ? '#111827' : '#ffffff',
+        pixelRatio: quality,
+        width: flowContainer.clientWidth * quality,
+        height: flowContainer.clientHeight * quality,
+        style: {
+          // Ensure crisp rendering
+          shapeRendering: 'geometricPrecision',
+          textRendering: 'optimizeLegibility',
+        },
+      });
+      
+      // Create a new PDF document
+      const format = pdfExportSettings.format.toUpperCase();
+      const orientation = pdfExportSettings.orientation;
+      const pdf = new jsPDF({
+        orientation: orientation,
+        unit: 'mm',
+        format: format,
+      });
+      
+      // Get PDF dimensions
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      
+      // Add title if specified
+      if (pdfExportSettings.title) {
+        pdf.setFontSize(16);
+        pdf.text(pdfExportSettings.title, 14, 15);
+        pdf.setFontSize(10);
+      }
+      
+      // Add metadata if enabled
+      if (pdfExportSettings.includeMetadata) {
+        const nodeCount = nodes.length;
+        const edgeCount = edges.length;
+        const metadataY = pdfExportSettings.title ? 25 : 15;
+        
+        pdf.setFontSize(8);
+        pdf.text(`Nodes: ${nodeCount} | Edges: ${edgeCount}`, 14, metadataY);
+      }
+      
+      // Add timestamp if enabled
+      if (pdfExportSettings.includeTimestamp) {
+        const timestamp = new Date().toLocaleString();
+        const timestampY = pdfExportSettings.title && pdfExportSettings.includeMetadata ? 30 : 
+                          pdfExportSettings.title || pdfExportSettings.includeMetadata ? 25 : 15;
+        
+        pdf.setFontSize(8);
+        pdf.text(`Generated: ${timestamp}`, 14, timestampY);
+      }
+      
+      // Calculate image placement (accounting for header space)
+      const headerSpace = 
+        (pdfExportSettings.title ? 15 : 0) + 
+        (pdfExportSettings.includeMetadata ? 5 : 0) + 
+        (pdfExportSettings.includeTimestamp ? 5 : 0);
+      
+      const availableHeight = pdfHeight - headerSpace - 10; // 10mm bottom margin
+      
+      // Load the image
+      const img = new Image();
+      img.src = dataUrl;
+      
+      await new Promise((resolve) => {
+        img.onload = resolve;
+      });
+      
+      // Calculate image dimensions to fit within available space while maintaining aspect ratio
+      const imgRatio = img.width / img.height;
+      let imgWidth = pdfWidth - 20; // 10mm margin on each side
+      let imgHeight = imgWidth / imgRatio;
+      
+      if (imgHeight > availableHeight) {
+        imgHeight = availableHeight;
+        imgWidth = imgHeight * imgRatio;
+      }
+      
+      // Add image to PDF
+      pdf.addImage(
+        dataUrl, 
+        'PNG', 
+        (pdfWidth - imgWidth) / 2, // Center horizontally
+        headerSpace + 5, // Position below header
+        imgWidth, 
+        imgHeight
+      );
+      
+      // Save the PDF
+      pdf.save('visualization.pdf');
+      
+      toast({
+        title: "PDF Export Complete",
+        description: "Your visualization has been exported as a high-resolution PDF.",
+      });
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+      toast({
+        title: "Export Failed",
+        description: "Could not generate PDF. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setExportLoading(false);
+      setPdfExportDialogOpen(false);
+    }
+  }, [
+    reactFlowInstance, 
+    pdfExportSettings, 
+    darkMode, 
+    nodes.length, 
+    edges.length, 
+    toast
+  ]);
   
   // Search
   const toggleSearch = useCallback(() => {
@@ -703,6 +856,18 @@ const Visualizer: React.FC = () => {
           </Panel>
         )}
         
+        {/* PDF Export Button */}
+        <Panel position="top-right" className="p-2 bg-white/90 dark:bg-gray-800/90 rounded-md shadow-md">
+          <Button 
+            onClick={exportVisualizationAsPDF}
+            className="flex items-center space-x-1"
+            size="sm"
+          >
+            <Download className="h-4 w-4 mr-1" />
+            Download PDF
+          </Button>
+        </Panel>
+        
         {/* History Input Panel */}
         <Panel position="top-left" className="p-2 bg-white/90 dark:bg-gray-800/90 rounded-md shadow-md">
           <div className="flex flex-col space-y-2">
@@ -731,6 +896,7 @@ const Visualizer: React.FC = () => {
                 variant="outline"
                 className="flex-1"
               >
+                
                 <FileText className="mr-2 h-4 w-4" />
                 Input Text
               </Button>
