@@ -1,9 +1,15 @@
 
-import React, { FC } from 'react';
-import { EdgeProps, getBezierPath, EdgeLabelRenderer } from '@xyflow/react';
+import React from 'react';
+import { 
+  getBezierPath, 
+  EdgeProps, 
+  BaseEdge, 
+  EdgeLabelRenderer,
+  getSmoothStepPath
+} from '@xyflow/react';
 
-// Hierarchical Edge - Solid connection for parent-child relationships
-export const HierarchicalEdge: FC<EdgeProps> = ({
+// Custom edge with animated dashed line
+const DashedEdge: React.FC<EdgeProps> = ({
   id,
   sourceX,
   sourceY,
@@ -11,32 +17,28 @@ export const HierarchicalEdge: FC<EdgeProps> = ({
   targetY,
   sourcePosition,
   targetPosition,
-  data,
   style = {},
+  data,
   markerEnd,
 }) => {
-  const [edgePath, labelX, labelY] = getBezierPath({
+  const [edgePath] = getBezierPath({
     sourceX,
     sourceY,
     sourcePosition,
     targetX,
     targetY,
     targetPosition,
-    curvature: 0.2,
   });
 
   return (
     <>
-      <path
-        id={id}
-        className="react-flow__edge-path"
-        d={edgePath}
+      <BaseEdge
+        path={edgePath}
         markerEnd={markerEnd}
         style={{
           ...style,
-          strokeWidth: 2,
-          stroke: 'hsl(var(--primary))',
-          filter: 'drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1))',
+          strokeDasharray: 5,
+          animation: 'dashdraw 0.5s linear infinite',
         }}
       />
       {data?.label && (
@@ -44,10 +46,16 @@ export const HierarchicalEdge: FC<EdgeProps> = ({
           <div
             style={{
               position: 'absolute',
-              transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
-              pointerEvents: 'all',
+              transform: `translate(-50%, -50%) translate(${(sourceX + targetX) / 2}px,${
+                (sourceY + targetY) / 2
+              }px)`,
+              background: 'white',
+              padding: '4px 8px',
+              borderRadius: 5,
+              fontSize: 12,
+              fontWeight: 500,
             }}
-            className="nodrag nopan bg-white/90 dark:bg-gray-800/90 px-2 py-1 rounded text-xs backdrop-blur-sm border border-gray-100 dark:border-gray-700"
+            className="nodrag nopan"
           >
             {data.label}
           </div>
@@ -57,8 +65,8 @@ export const HierarchicalEdge: FC<EdgeProps> = ({
   );
 };
 
-// Network Edge - Dashed connection for related concepts
-export const NetworkEdge: FC<EdgeProps> = ({
+// Custom edge with glow effect
+const GlowingEdge: React.FC<EdgeProps> = ({
   id,
   sourceX,
   sourceY,
@@ -66,33 +74,27 @@ export const NetworkEdge: FC<EdgeProps> = ({
   targetY,
   sourcePosition,
   targetPosition,
-  data,
-  selected,
   style = {},
+  data,
   markerEnd,
 }) => {
-  const [edgePath, labelX, labelY] = getBezierPath({
+  const [edgePath] = getSmoothStepPath({
     sourceX,
     sourceY,
     sourcePosition,
     targetX,
     targetY,
     targetPosition,
-    curvature: 0.2,
   });
 
   return (
     <>
-      <path
-        id={id}
-        className={`react-flow__edge-path ${selected ? 'animated' : ''}`}
-        d={edgePath}
+      <BaseEdge
+        path={edgePath}
         markerEnd={markerEnd}
         style={{
           ...style,
-          strokeDasharray: '5, 5',
-          strokeWidth: selected ? 2 : 1.5,
-          stroke: selected ? 'hsl(var(--primary))' : 'hsl(223, 13%, 65%)',
+          filter: 'drop-shadow(0 0 5px currentColor)',
         }}
       />
       {data?.label && (
@@ -100,10 +102,16 @@ export const NetworkEdge: FC<EdgeProps> = ({
           <div
             style={{
               position: 'absolute',
-              transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
-              pointerEvents: 'all',
+              transform: `translate(-50%, -50%) translate(${(sourceX + targetX) / 2}px,${
+                (sourceY + targetY) / 2
+              }px)`,
+              background: 'white',
+              padding: '4px 8px',
+              borderRadius: 5,
+              fontSize: 12,
+              fontWeight: 500,
             }}
-            className="nodrag nopan bg-white/90 dark:bg-gray-800/90 px-2 py-1 rounded text-xs backdrop-blur-sm border border-gray-100 dark:border-gray-700"
+            className="nodrag nopan"
           >
             {data.label}
           </div>
@@ -113,8 +121,7 @@ export const NetworkEdge: FC<EdgeProps> = ({
   );
 };
 
-// Export the edge types for use with ReactFlow
 export const edgeTypes = {
-  hierarchical: HierarchicalEdge,
-  network: NetworkEdge,
+  dashed: DashedEdge,
+  glowing: GlowingEdge,
 };

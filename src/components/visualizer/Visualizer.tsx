@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { 
   ReactFlow, 
@@ -13,7 +12,7 @@ import {
   Node,
   Edge
 } from '@xyflow/react';
-import 'reactflow/dist/style.css';
+import '@xyflow/react/dist/style.css';
 
 import { nodeTypes } from './NodeTypes';
 import { edgeTypes } from './EdgeTypes';
@@ -343,7 +342,7 @@ const Visualizer: React.FC = () => {
       
       {selectedNode && (
         <NodeDetailsPanel
-          node={selectedNode}
+          node={selectedNode as { id: string; data: NodeData }}
           onClose={closeNodeDetails}
         />
       )}
