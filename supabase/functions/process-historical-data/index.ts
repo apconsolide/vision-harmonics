@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
@@ -59,32 +58,32 @@ serve(async (req) => {
 // Generate prompt for Gemini from user text input
 function generateGeminiPromptFromText(userText: string) {
   return `
-    Analyze this historical text and extract key entities, events, people, places, concepts, dates and relationships:
-    
+    حلل هذا النص التاريخي واستخرج الكيانات الرئيسية والأحداث والأشخاص والأماكن والمفاهيم والتواريخ والعلاقات:
+
     ${userText}
-    
-    Generate a knowledge graph representation with the following:
-    1. Identify main entities with specific types:
-       - People (historical figures, groups)
-       - Places (locations, countries, cities)
-       - Events (battles, treaties, revolutions)
-       - Concepts (ideas, movements, theories)
-       - Documents (treaties, constitutions, books)
-       - Dates (specific years, time periods, eras)
-    
-    2. Establish relationships between these entities:
-       - Causal relationships (caused by, resulted in)
-       - Temporal relationships (before, after, during)
-       - Spatial relationships (located in, traveled to)
-       - Social relationships (allied with, opposed to)
-       - Conceptual relationships (influenced by, part of)
-    
-    3. Determine importance and context:
-       - Assign importance scores (1-10) to entities
-       - Extract all dates and time periods mentioned
-       - Identify major themes and patterns
-    
-    Format your response as a JSON object with 'nodes' and 'edges' arrays that follow this structure:
+
+    قم بإنشاء تمثيل بياني للمعرفة (knowledge graph) بالخصائص التالية:
+    1. حدد الكيانات الرئيسية مع أنواع محددة:
+       - الأشخاص (شخصيات تاريخية ، مجموعات)
+       - الأماكن (المواقع والبلدان والمدن)
+       - الأحداث (المعارك والمعاهدات والثورات)
+       - المفاهيم (الأفكار والحركات والنظريات)
+       - الوثائق (المعاهدات والدساتير والكتب)
+       - التواريخ (سنوات محددة وفترات زمنية وعصور)
+
+    2. قم بإنشاء علاقات بين هذه الكيانات:
+       - العلاقات السببية (نتج عن ، تسبب فيه)
+       - العلاقات الزمنية (قبل ، بعد ، أثناء)
+       - العلاقات المكانية (تقع في ، سافر إلى)
+       - العلاقات الاجتماعية (متحالف مع ، يعارض)
+       - العلاقات المفاهيمية (متأثر بـ ، جزء من)
+
+    3. حدد الأهمية والسياق:
+       - قم بتعيين درجات الأهمية (1-10) للكيانات
+       - استخرج جميع التواريخ والفترات الزمنية المذكورة
+       - حدد الموضوعات والأنماط الرئيسية
+
+    قم بتنسيق ردك ككائن JSON مع مصفوفات 'nodes' و 'edges' تتبع هذا الهيكل:
     {
       "nodes": [
         {
@@ -122,49 +121,49 @@ function generateGeminiPromptFromText(userText: string) {
         }
       ]
     }
-    
-    Ensure entity types match their proper visualization type. For example:
-    - People should be type "person"
-    - Events should be type "event"
-    - Places should be type "place"
-    - Concepts should be type "concept"
-    - Documents should be type "document"
-    - Dates/years should be type "date"
-    
-    Position nodes in a logical layout (persons near related events, places near events that occurred there, etc.).
+
+    تأكد من أن أنواع الكيانات تطابق نوع التصور المناسب لها. على سبيل المثال:
+    - الأشخاص يجب أن يكون نوعهم "person"
+    - الأحداث يجب أن يكون نوعها "event"
+    - الأماكن يجب أن يكون نوعها "place"
+    - المفاهيم يجب أن يكون نوعها "concept"
+    - الوثائق يجب أن يكون نوعها "document"
+    - التواريخ / السنوات يجب أن يكون نوعها "date"
+
+    ضع العقد في تخطيط منطقي (الأشخاص بالقرب من الأحداث ذات الصلة ، والأماكن بالقرب من الأحداث التي وقعت فيها ، وما إلى ذلك).
   `;
 }
 
 // Generate prompt for Gemini
 function generateGeminiPrompt(timelines: any[], events: any[]) {
   return `
-    Analyze these historical timelines and events. Identify key relationships, connections, and patterns:
-    
-    Timelines: ${JSON.stringify(timelines)}
-    
-    Events: ${JSON.stringify(events)}
-    
-    Generate a knowledge graph representation with the following:
-    1. Identify main entities with specific types:
-       - People (historical figures, groups)
-       - Places (locations, countries, cities)
-       - Events (battles, treaties, revolutions)
-       - Concepts (ideas, movements, theories)
-       - Documents (treaties, constitutions, books)
-       - Dates (specific years, time periods, eras)
-    
-    2. Establish relationships between these entities:
-       - Causal relationships (caused by, resulted in)
-       - Temporal relationships (before, after, during)
-       - Spatial relationships (located in, traveled to)
-       - Social relationships (allied with, opposed to)
-       - Conceptual relationships (influenced by, part of)
-       
-    3. Determine importance and context:
-       - Assign importance scores (1-10) to entities
-       - Identify major themes and patterns
-    
-    Format your response as a JSON object with 'nodes' and 'edges' arrays that follow this structure:
+    حلل هذه الجداول الزمنية والأحداث التاريخية. حدد العلاقات والاتصالات والأنماط الرئيسية:
+
+    الجداول الزمنية: ${JSON.stringify(timelines)}
+
+    الأحداث: ${JSON.stringify(events)}
+
+    قم بإنشاء تمثيل بياني للمعرفة (knowledge graph) بالخصائص التالية:
+    1. حدد الكيانات الرئيسية مع أنواع محددة:
+       - الأشخاص (شخصيات تاريخية ، مجموعات)
+       - الأماكن (المواقع والبلدان والمدن)
+       - الأحداث (المعارك والمعاهدات والثورات)
+       - المفاهيم (الأفكار والحركات والنظريات)
+       - الوثائق (المعاهدات والدساتير والكتب)
+       - التواريخ (سنوات محددة وفترات زمنية وعصور)
+
+    2. قم بإنشاء علاقات بين هذه الكيانات:
+       - العلاقات السببية (نتج عن ، تسبب فيه)
+       - العلاقات الزمنية (قبل ، بعد ، أثناء)
+       - العلاقات المكانية (تقع في ، سافر إلى)
+       - العلاقات الاجتماعية (متحالف مع ، يعارض)
+       - العلاقات المفاهيمية (متأثر بـ ، جزء من)
+
+    3. حدد الأهمية والسياق:
+       - قم بتعيين درجات الأهمية (1-10) للكيانات
+       - حدد الموضوعات والأنماط الرئيسية
+
+    قم بتنسيق ردك ككائن JSON مع مصفوفات 'nodes' و 'edges' تتبع هذا الهيكل:
     {
       "nodes": [
         {
@@ -202,16 +201,16 @@ function generateGeminiPrompt(timelines: any[], events: any[]) {
         }
       ]
     }
-    
-    Ensure entity types match their proper visualization type. For example:
-    - People should be type "person"
-    - Events should be type "event"
-    - Places should be type "place"
-    - Concepts should be type "concept"
-    - Documents should be type "document"
-    - Dates/years should be type "date"
-    
-    Position nodes in a logical layout (persons near related events, places near events that occurred there, etc.).
+
+    تأكد من أن أنواع الكيانات تطابق نوع التصور المناسب لها. على سبيل المثال:
+    - الأشخاص يجب أن يكون نوعهم "person"
+    - الأحداث يجب أن يكون نوعها "event"
+    - الأماكن يجب أن يكون نوعها "place"
+    - المفاهيم يجب أن يكون نوعها "concept"
+    - الوثائق يجب أن يكون نوعها "document"
+    - التواريخ / السنوات يجب أن يكون نوعها "date"
+
+    ضع العقد في تخطيط منطقي (الأشخاص بالقرب من الأحداث ذات الصلة ، والأماكن بالقرب من الأحداث التي وقعت فيها ، وما إلى ذلك).
   `;
 }
 
