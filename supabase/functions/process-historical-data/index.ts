@@ -1,241 +1,155 @@
 
-import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
 
-const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
-
-interface TimelineEvent {
-  id: string;
-  timeline_id: string;
-  title: string;
-  description?: string;
-  date: string;
-  category?: string;
-}
-
-interface Timeline {
-  id: string;
-  title: string;
-  description?: string;
-  start_date: string;
-  end_date: string;
-}
-
-interface Node {
-  id: string;
-  type: string;
-  position: { x: number; y: number };
-  data: {
-    id: string;
-    label: string;
-    description?: string;
-    category?: string;
-    size?: string;
-    metadata?: Record<string, any>;
-  };
-}
-
-interface Edge {
-  id: string;
-  source: string;
-  target: string;
-  type?: string;
-  animated?: boolean;
-  markerEnd?: { type: string };
-  data?: {
-    label?: string;
-  };
-}
-
-interface VisualizationData {
-  nodes: Node[];
-  edges: Edge[];
-}
+const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') || '';
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
+const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') || '';
 
 serve(async (req) => {
-  // Handle CORS for preflight requests
+  // Handle CORS preflight request
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   try {
+    // Get request data
     const { timelines, events } = await req.json();
     
+    // Create Supabase client
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    
     if (!GEMINI_API_KEY) {
-      console.error('GEMINI_API_KEY is not set');
-      return new Response(
-        JSON.stringify({ 
-          error: 'GEMINI_API_KEY is not configured. Please set up the GEMINI_API_KEY environment variable.' 
-        }),
-        { 
-          status: 500, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
-      );
+      // Return simple visualization if no API key is available
+      const simpleVisualization = generateSimpleVisualization(timelines, events);
+      return new Response(JSON.stringify(simpleVisualization), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      });
     }
     
-    // Process data without Gemini if there's not enough data
-    if (!timelines?.length || !events?.length) {
-      console.log('Not enough data to process with Gemini');
-      const visualizationData = processHistoricalDataBasic(timelines || [], events || []);
-      return new Response(
-        JSON.stringify(visualizationData),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    // Process data with Gemini
+    const prompt = generateGeminiPrompt(timelines, events);
+    const geminiResponse = await fetchGeminiResponse(prompt);
     
-    // Prepare the data for Gemini
-    const prompt = prepareGeminiPrompt(timelines, events);
+    // Parse Gemini response and generate visualization
+    const visualization = processGeminiResponse(geminiResponse, timelines, events);
     
-    // Process with Gemini Flash
-    const geminiResponse = await processWithGemini(prompt);
-    
-    // If Gemini processing fails, fallback to basic processing
-    if (!geminiResponse) {
-      console.log('Fallback to basic processing');
-      const visualizationData = processHistoricalDataBasic(timelines, events);
-      return new Response(
-        JSON.stringify(visualizationData),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-    
-    // Parse the Gemini response and create visualization data
-    const visualizationData = parseGeminiResponse(geminiResponse, timelines, events);
-    
-    return new Response(
-      JSON.stringify(visualizationData),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return new Response(JSON.stringify(visualization), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 200,
+    });
     
   } catch (error) {
     console.error('Error processing historical data:', error);
     
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { 
-        status: 500, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
-    );
+    return new Response(JSON.stringify({ error: error.message }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 500,
+    });
   }
 });
 
-// Prepare the prompt for Gemini
-function prepareGeminiPrompt(timelines: Timeline[], events: TimelineEvent[]): string {
+// Generate prompt for Gemini
+function generateGeminiPrompt(timelines: any[], events: any[]) {
   return `
-    I have timeline data and events that I want to visualize as a knowledge graph.
+    Analyze these historical timelines and events. Identify key relationships, connections, and patterns:
     
-    Timelines:
-    ${JSON.stringify(timelines, null, 2)}
+    Timelines: ${JSON.stringify(timelines)}
     
-    Events:
-    ${JSON.stringify(events, null, 2)}
+    Events: ${JSON.stringify(events)}
     
-    Please analyze this historical data and create:
-    1. A set of nodes representing key entities (events, people, places, concepts)
-    2. A set of edges representing relationships between these entities
+    Generate a knowledge graph representation with the following:
+    1. Identify main entities (people, places, events, concepts)
+    2. Establish relationships between these entities
+    3. Find patterns or cause-effect relationships
+    4. Determine importance of each entity
     
-    For each node, include:
-    - id: a unique identifier
-    - type: "event", "person", "concept", etc.
-    - position: {x, y} coordinates (just placeholder values)
-    - data: containing label, description, category, and any metadata
-    
-    For each edge, include:
-    - id: a unique identifier
-    - source: the id of the source node
-    - target: the id of the target node
-    - type: "timeline", "dashed", or "glowing"
-    - data: containing a label describing the relationship
-    
-    Please identify important relationships beyond just timeline connections.
-    Also extract any key people, places, or concepts mentioned in the event descriptions.
-    Return a JSON object with "nodes" and "edges" arrays.
+    Format your response as a JSON object with 'nodes' and 'edges' arrays that follow this structure:
+    {
+      "nodes": [
+        {
+          "id": "unique-id",
+          "type": "concept|event|person|place",
+          "position": {"x": number, "y": number},
+          "data": {
+            "id": "unique-id",
+            "label": "Entity name",
+            "description": "Brief description",
+            "category": "Category name",
+            "size": "small|medium|large",
+            "metadata": { "date": "YYYY-MM-DD", "importance": number }
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "edge-1",
+          "source": "source-node-id",
+          "target": "target-node-id",
+          "type": "default|dashed|glowing|timeline",
+          "animated": true|false,
+          "data": { "label": "relationship name" }
+        }
+      ]
+    }
   `;
 }
 
-// Process with Gemini Flash
-async function processWithGemini(prompt: string): Promise<string | null> {
+// Fetch response from Gemini API
+async function fetchGeminiResponse(prompt: string) {
   try {
-    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': GEMINI_API_KEY,
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              {
-                text: prompt
-              }
-            ]
-          }
-        ],
-        generationConfig: {
-          temperature: 0.2,
-          maxOutputTokens: 8192,
-        }
-      }),
-    });
-
-    if (!response.ok) {
-      console.error(`Gemini API error: ${response.status} ${response.statusText}`);
-      const errorData = await response.json();
-      console.error('Error details:', errorData);
-      return null;
-    }
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: prompt,
+                },
+              ],
+            },
+          ],
+        }),
+      }
+    );
 
     const data = await response.json();
-    
-    if (!data.candidates || !data.candidates[0]?.content?.parts?.[0]?.text) {
-      console.error('Unexpected response format from Gemini API');
-      console.error('Response:', JSON.stringify(data, null, 2));
-      return null;
-    }
-    
-    const generatedText = data.candidates[0].content.parts[0].text;
-    return generatedText;
-    
+    return data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
   } catch (error) {
     console.error('Error calling Gemini API:', error);
-    return null;
+    return '';
   }
 }
 
-// Parse the Gemini response
-function parseGeminiResponse(response: string, timelines: Timeline[], events: TimelineEvent[]): VisualizationData {
+// Process Gemini response to extract visualization data
+function processGeminiResponse(geminiResponse: string, timelines: any[], events: any[]) {
   try {
-    // Extract the JSON object from the response text
-    const jsonMatch = response.match(/```json\n([\s\S]*?)\n```/) || 
-                     response.match(/```\n([\s\S]*?)\n```/) ||
-                     response.match(/(\{[\s\S]*\})/);
-                     
-    if (jsonMatch && jsonMatch[1]) {
-      const jsonStr = jsonMatch[1].trim();
-      const parsed = JSON.parse(jsonStr);
-      
-      if (parsed.nodes && parsed.edges) {
-        return parsed as VisualizationData;
-      }
+    // Try to extract JSON from the response
+    const jsonMatch = geminiResponse.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const jsonData = JSON.parse(jsonMatch[0]);
+      return jsonData;
     }
-    
-    // If we couldn't extract properly formatted JSON, fallback to basic processing
-    console.log('Could not parse Gemini response, falling back to basic processing');
-    return processHistoricalDataBasic(timelines, events);
-    
   } catch (error) {
     console.error('Error parsing Gemini response:', error);
-    return processHistoricalDataBasic(timelines, events);
   }
+  
+  // Fallback to simple visualization if parsing fails
+  return generateSimpleVisualization(timelines, events);
 }
 
-// Basic data processing without Gemini
-function processHistoricalDataBasic(timelines: Timeline[], events: TimelineEvent[]): VisualizationData {
-  const nodes: Node[] = [];
-  const edges: Edge[] = [];
+// Generate simple visualization without AI
+function generateSimpleVisualization(timelines: any[], events: any[]) {
+  const nodes = [];
+  const edges = [];
   
   // Create timeline nodes
   timelines.forEach((timeline, index) => {
@@ -248,8 +162,8 @@ function processHistoricalDataBasic(timelines: Timeline[], events: TimelineEvent
         label: timeline.title || 'Timeline',
         description: timeline.description || '',
         category: 'primary',
-        size: 'large'
-      }
+        size: 'large',
+      },
     });
   });
   
@@ -270,9 +184,9 @@ function processHistoricalDataBasic(timelines: Timeline[], events: TimelineEvent
         size: 'medium',
         metadata: {
           date: formattedDate,
-          category: event.category || 'historical'
-        }
-      }
+          category: event.category || 'historical',
+        },
+      },
     });
     
     // Connect events to their timelines
@@ -283,47 +197,9 @@ function processHistoricalDataBasic(timelines: Timeline[], events: TimelineEvent
         target: `event-${event.id}`,
         type: 'timeline',
         animated: true,
-        markerEnd: {
-          type: 'arrowclosed'
+        data: {
+          label: 'contains',
         },
-        data: {
-          label: 'contains'
-        }
-      });
-    }
-  });
-  
-  // Connect events chronologically within the same timeline
-  const eventsByTimeline: Record<string, TimelineEvent[]> = {};
-  
-  events.forEach((event) => {
-    if (!event.timeline_id) return;
-    
-    if (!eventsByTimeline[event.timeline_id]) {
-      eventsByTimeline[event.timeline_id] = [];
-    }
-    
-    eventsByTimeline[event.timeline_id].push(event);
-  });
-  
-  // Sort events by date and create chronological connections
-  Object.values(eventsByTimeline).forEach((timelineEvents) => {
-    timelineEvents.sort((a, b) => {
-      const dateA = a.date ? new Date(a.date).getTime() : 0;
-      const dateB = b.date ? new Date(b.date).getTime() : 0;
-      return dateA - dateB;
-    });
-    
-    for (let i = 0; i < timelineEvents.length - 1; i++) {
-      edges.push({
-        id: `edge-chrono-${timelineEvents[i].id}-${timelineEvents[i+1].id}`,
-        source: `event-${timelineEvents[i].id}`,
-        target: `event-${timelineEvents[i+1].id}`,
-        type: 'dashed',
-        animated: true,
-        data: {
-          label: 'followed by'
-        }
       });
     }
   });

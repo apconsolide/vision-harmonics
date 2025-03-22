@@ -22,7 +22,7 @@ import NodeDetailsPanel from './NodeDetailsPanel';
 import Toolbar from './Toolbar';
 import { toast } from '@/components/ui/use-toast';
 import { initialNodes, initialEdges } from './initial-elements';
-import { NodeData } from '@/types/visualizer';
+import { NodeData, HistoricalData } from '@/types/visualizer';
 import { supabase } from '@/integrations/supabase/client';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -30,10 +30,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Search } from 'lucide-react';
 
 const nodeColor = (node: Node) => {
-  switch (node.data.category) {
+  const data = node.data as NodeData;
+  switch (data.category) {
     case 'primary':
       return '#4C6EF5';
     case 'secondary':
@@ -74,7 +75,9 @@ const Visualizer: React.FC = () => {
     size: 'medium',
   });
   const [loading, setLoading] = useState(false);
-  const [timelineData, setTimelineData] = useState<any[]>([]);
+  const [historicalData, setHistoricalData] = useState<HistoricalData>({ timelines: [], events: [] });
+  const [searchText, setSearchText] = useState('');
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   
   // ReactFlow utils
   const reactFlowInstance = useReactFlow();
@@ -189,8 +192,10 @@ const Visualizer: React.FC = () => {
         setNodes((nds) => {
           // Sort nodes by date if available in metadata
           const sortedNodes = [...nds].sort((a, b) => {
-            const dateA = a.data?.metadata?.date ? new Date(a.data.metadata.date).getTime() : 0;
-            const dateB = b.data?.metadata?.date ? new Date(b.data.metadata.date).getTime() : 0;
+            const dataA = a.data as NodeData;
+            const dataB = b.data as NodeData;
+            const dateA = dataA?.metadata?.date ? new Date(dataA.metadata.date).getTime() : 0;
+            const dateB = dataB?.metadata?.date ? new Date(dataB.metadata.date).getTime() : 0;
             return dateA - dateB;
           });
           
@@ -212,8 +217,10 @@ const Visualizer: React.FC = () => {
           
           // Get sorted nodes for timeline connections
           const sortedNodes = [...nodes].sort((a, b) => {
-            const dateA = a.data?.metadata?.date ? new Date(a.data.metadata.date).getTime() : 0;
-            const dateB = b.data?.metadata?.date ? new Date(b.data.metadata.date).getTime() : 0;
+            const dataA = a.data as NodeData;
+            const dataB = b.data as NodeData;
+            const dateA = dataA?.metadata?.date ? new Date(dataA.metadata.date).getTime() : 0;
+            const dateB = dataB?.metadata?.date ? new Date(dataB.metadata.date).getTime() : 0;
             return dateA - dateB;
           });
           
@@ -333,11 +340,39 @@ const Visualizer: React.FC = () => {
   
   // Search
   const toggleSearch = useCallback(() => {
+    setIsSearchOpen(!isSearchOpen);
+  }, [isSearchOpen]);
+  
+  const handleSearch = useCallback((searchTerm: string) => {
+    setSearchText(searchTerm);
+    
+    if (!searchTerm) {
+      // If search is cleared, reset node styles
+      setNodes(nodes => nodes.map(node => ({
+        ...node,
+        style: { opacity: 1 }
+      })));
+      return;
+    }
+    
+    // Highlight nodes that match the search term
+    setNodes(nodes => nodes.map(node => {
+      const data = node.data as NodeData;
+      const matchesSearch = 
+        data.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (data.description && data.description.toLowerCase().includes(searchTerm.toLowerCase()));
+      
+      return {
+        ...node,
+        style: { opacity: matchesSearch ? 1 : 0.2 }
+      };
+    }));
+    
     toast({
-      title: "Search",
-      description: "Search functionality would be implemented here.",
+      title: "Search Results",
+      description: `Highlighting nodes matching "${searchTerm}"`,
     });
-  }, [toast]);
+  }, [setNodes, toast]);
   
   // Filter
   const toggleFilter = useCallback(() => {
@@ -374,7 +409,7 @@ const Visualizer: React.FC = () => {
         
       if (eventsError) throw eventsError;
       
-      setTimelineData({ timelines, events });
+      setHistoricalData({ timelines, events });
       
       // Call the Supabase Edge Function to process the data with Gemini
       const { data, error } = await supabase.functions.invoke('process-historical-data', {
@@ -401,7 +436,7 @@ const Visualizer: React.FC = () => {
         variant: "destructive",
       });
       
-      // Fallback to generating a simple historical visualization
+      // Fallback to generating a simple historical graph
       generateSimpleHistoricalGraph();
     } finally {
       setLoading(false);
@@ -412,14 +447,14 @@ const Visualizer: React.FC = () => {
   const generateSimpleHistoricalGraph = useCallback(() => {
     try {
       // Create nodes and edges from timeline data
-      if (!timelineData.events) return;
+      if (!historicalData.events) return;
       
       const generatedNodes: Node[] = [];
       const generatedEdges: Edge[] = [];
       
       // Create timeline nodes
-      if (timelineData.timelines) {
-        timelineData.timelines.forEach((timeline: any, index: number) => {
+      if (historicalData.timelines) {
+        historicalData.timelines.forEach((timeline: any, index: number) => {
           generatedNodes.push({
             id: `timeline-${timeline.id}`,
             type: 'concept',
@@ -436,7 +471,7 @@ const Visualizer: React.FC = () => {
       }
       
       // Create event nodes
-      timelineData.events.forEach((event: any, index: number) => {
+      historicalData.events.forEach((event: any, index: number) => {
         const eventDate = event.date ? new Date(event.date) : null;
         const formattedDate = eventDate ? eventDate.toLocaleDateString() : '';
         
@@ -478,7 +513,7 @@ const Visualizer: React.FC = () => {
       // Connect events chronologically within the same timeline
       const eventsByTimeline: Record<string, any[]> = {};
       
-      timelineData.events.forEach((event: any) => {
+      historicalData.events.forEach((event: any) => {
         if (!event.timeline_id) return;
         
         if (!eventsByTimeline[event.timeline_id]) {
@@ -527,7 +562,7 @@ const Visualizer: React.FC = () => {
     } catch (error) {
       console.error('Error generating simple historical graph:', error);
     }
-  }, [timelineData, setNodes, setEdges, toast, changeLayout]);
+  }, [historicalData, setNodes, setEdges, toast, changeLayout]);
   
   // Apply dark mode on component mount if needed
   useEffect(() => {
@@ -572,6 +607,28 @@ const Visualizer: React.FC = () => {
           size={1}
           style={{ backgroundColor: darkMode ? "#111827" : "#f8fafc" }}
         />
+        
+        {/* Search Panel */}
+        {isSearchOpen && (
+          <Panel position="top-center" className="p-2 bg-white/90 dark:bg-gray-800/90 rounded-md shadow-md w-full max-w-md">
+            <div className="flex items-center space-x-2">
+              <Search className="h-4 w-4 text-gray-500" />
+              <Input
+                type="text"
+                placeholder="Search nodes..."
+                value={searchText}
+                onChange={(e) => handleSearch(e.target.value)}
+                className="flex-1"
+              />
+              <Button size="sm" variant="ghost" onClick={() => {
+                setSearchText('');
+                handleSearch('');
+              }}>
+                Clear
+              </Button>
+            </div>
+          </Panel>
+        )}
         
         {/* Historical Data Panel */}
         <Panel position="top-left" className="p-2 bg-white/90 dark:bg-gray-800/90 rounded-md shadow-md">

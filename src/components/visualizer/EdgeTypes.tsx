@@ -8,13 +8,6 @@ import {
   getSmoothStepPath
 } from '@xyflow/react';
 
-interface EdgeData {
-  label?: string;
-  type?: string;
-  animated?: boolean;
-  style?: Record<string, any>;
-}
-
 // Custom edge with animated dashed line
 const DashedEdge: React.FC<EdgeProps> = ({
   id,
@@ -179,7 +172,7 @@ const TimelineEdge: React.FC<EdgeProps> = ({
             }}
             className="nodrag nopan"
           >
-            {data?.label || 'Timeline'}
+            {data.label}
           </div>
         </EdgeLabelRenderer>
       )}

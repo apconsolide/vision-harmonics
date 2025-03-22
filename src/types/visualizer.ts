@@ -1,4 +1,6 @@
 
+import { Node, Edge } from '@xyflow/react';
+
 export interface NodeData {
   id?: string;
   label: string;
@@ -7,6 +9,7 @@ export interface NodeData {
   size?: 'small' | 'medium' | 'large';
   importance?: number;
   metadata?: Record<string, any>;
+  [key: string]: any; // Add index signature to satisfy Record<string, unknown>
 }
 
 export interface EdgeData {
@@ -15,6 +18,7 @@ export interface EdgeData {
   type?: string;
   animated?: boolean;
   style?: Record<string, any>;
+  [key: string]: any; // Add index signature
 }
 
 export interface VisualizerState {
@@ -44,4 +48,9 @@ export interface Timeline {
   start_date: string;
   end_date: string;
   user_id?: string;
+}
+
+export interface HistoricalData {
+  timelines: Timeline[];
+  events: TimelineEvent[];
 }
