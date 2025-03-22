@@ -8,6 +8,13 @@ import {
   getSmoothStepPath
 } from '@xyflow/react';
 
+interface EdgeData {
+  label?: string;
+  type?: string;
+  animated?: boolean;
+  style?: Record<string, any>;
+}
+
 // Custom edge with animated dashed line
 const DashedEdge: React.FC<EdgeProps> = ({
   id,
@@ -25,9 +32,9 @@ const DashedEdge: React.FC<EdgeProps> = ({
     sourceX,
     sourceY,
     sourcePosition,
+    targetPosition,
     targetX,
     targetY,
-    targetPosition,
   });
 
   return (
@@ -121,7 +128,67 @@ const GlowingEdge: React.FC<EdgeProps> = ({
   );
 };
 
+// Timeline edge - represents chronological connections
+const TimelineEdge: React.FC<EdgeProps> = ({
+  id,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourcePosition,
+  targetPosition,
+  style = {},
+  data,
+  markerEnd,
+}) => {
+  const [edgePath] = getSmoothStepPath({
+    sourceX,
+    sourceY,
+    sourcePosition,
+    targetX,
+    targetY,
+    targetPosition,
+  });
+
+  return (
+    <>
+      <BaseEdge
+        path={edgePath}
+        markerEnd={markerEnd}
+        style={{
+          ...style,
+          strokeWidth: 3,
+          stroke: '#f59e0b',
+          strokeDasharray: '8 4',
+        }}
+      />
+      {data?.label && (
+        <EdgeLabelRenderer>
+          <div
+            style={{
+              position: 'absolute',
+              transform: `translate(-50%, -50%) translate(${(sourceX + targetX) / 2}px,${
+                (sourceY + targetY) / 2
+              }px)`,
+              background: '#fffbeb',
+              border: '1px solid #f59e0b',
+              padding: '2px 6px',
+              borderRadius: 5,
+              fontSize: 10,
+              fontWeight: 500,
+            }}
+            className="nodrag nopan"
+          >
+            {data?.label || 'Timeline'}
+          </div>
+        </EdgeLabelRenderer>
+      )}
+    </>
+  );
+};
+
 export const edgeTypes = {
   dashed: DashedEdge,
   glowing: GlowingEdge,
+  timeline: TimelineEdge
 };

@@ -21,7 +21,7 @@ const getNodeSize = (data: NodeData): number => {
 };
 
 // Basic concept node
-const ConceptNode: React.FC<NodeProps<NodeData>> = memo(({ data, selected }) => {
+const ConceptNode = memo(({ data }: NodeProps<NodeData>) => {
   const nodeSize = getNodeSize(data);
   
   const primaryColor = (() => {
@@ -51,7 +51,7 @@ const ConceptNode: React.FC<NodeProps<NodeData>> = memo(({ data, selected }) => 
     <div
       className={`flex flex-col items-center justify-center p-4 border-2 rounded-xl transition-shadow ${
         primaryColor
-      } ${selected ? 'shadow-lg' : 'shadow'}`}
+      } shadow`}
       style={{ width: nodeSize, height: nodeSize }}
     >
       <div className="font-medium text-center break-words w-full">{data.label}</div>
@@ -67,12 +67,10 @@ const ConceptNode: React.FC<NodeProps<NodeData>> = memo(({ data, selected }) => 
 });
 
 // Document node
-const DocumentNode: React.FC<NodeProps<NodeData>> = memo(({ data, selected }) => {
+const DocumentNode = memo(({ data }: NodeProps<NodeData>) => {
   return (
     <div
-      className={`flex flex-col items-center bg-white border-2 rounded-md p-3 ${
-        selected ? 'border-blue-500 shadow-lg' : 'border-gray-300 shadow'
-      }`}
+      className="flex flex-col items-center bg-white border-2 rounded-md p-3 shadow"
       style={{ width: 180 }}
     >
       <div className="w-full h-4 bg-gray-200 mb-2 rounded-sm"></div>
@@ -90,7 +88,60 @@ const DocumentNode: React.FC<NodeProps<NodeData>> = memo(({ data, selected }) =>
   );
 });
 
+// Historical event node
+const EventNode = memo(({ data }: NodeProps<NodeData>) => {
+  return (
+    <div
+      className="flex flex-col items-center bg-amber-50 border-2 border-amber-500 rounded-md p-3 shadow-md"
+      style={{ width: 200 }}
+    >
+      <div className="bg-amber-200 text-amber-800 text-xs px-2 py-1 rounded-full self-start mb-2">
+        {data.category || 'Event'}
+      </div>
+      <div className="font-medium text-center w-full">{data.label}</div>
+      {data.description && (
+        <div className="text-xs mt-1 text-gray-600 overflow-hidden">
+          {data.description}
+        </div>
+      )}
+      {data.metadata?.date && (
+        <div className="text-xs mt-2 text-amber-700 font-semibold">
+          {data.metadata.date}
+        </div>
+      )}
+      <Handle type="target" position={Position.Top} className="!bg-amber-500 border-none h-2 w-2" />
+      <Handle type="source" position={Position.Bottom} className="!bg-amber-500 border-none h-2 w-2" />
+    </div>
+  );
+});
+
+// Person node
+const PersonNode = memo(({ data }: NodeProps<NodeData>) => {
+  return (
+    <div
+      className="flex flex-col items-center bg-blue-50 border-2 border-blue-400 rounded-full p-4 shadow-md"
+      style={{ width: 180, height: 180 }}
+    >
+      <div className="w-16 h-16 bg-blue-200 rounded-full mb-2 flex items-center justify-center">
+        <span className="text-2xl text-blue-500">
+          {data.label.charAt(0).toUpperCase()}
+        </span>
+      </div>
+      <div className="font-medium text-center">{data.label}</div>
+      {data.description && (
+        <div className="text-xs mt-1 text-gray-600 text-center overflow-hidden">
+          {data.description}
+        </div>
+      )}
+      <Handle type="target" position={Position.Top} className="!bg-blue-400 border-none h-2 w-2" />
+      <Handle type="source" position={Position.Bottom} className="!bg-blue-400 border-none h-2 w-2" />
+    </div>
+  );
+});
+
 export const nodeTypes = {
   concept: ConceptNode,
   document: DocumentNode,
+  event: EventNode,
+  person: PersonNode
 };

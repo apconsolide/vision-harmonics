@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { 
   ReactFlow, 
@@ -22,12 +23,14 @@ import Toolbar from './Toolbar';
 import { toast } from '@/components/ui/use-toast';
 import { initialNodes, initialEdges } from './initial-elements';
 import { NodeData } from '@/types/visualizer';
+import { supabase } from '@/integrations/supabase/client';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Loader2 } from 'lucide-react';
 
 const nodeColor = (node: Node) => {
   switch (node.data.category) {
@@ -47,6 +50,12 @@ const nodeColor = (node: Node) => {
       return '#FA5252';
     case 'info':
       return '#22B8CF';
+    case 'event':
+      return '#f59e0b';
+    case 'person':
+      return '#3b82f6';
+    case 'place':
+      return '#10b981';
     default:
       return '#E9ECEF';
   }
@@ -57,13 +66,15 @@ const Visualizer: React.FC = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [darkMode, setDarkMode] = useState(false);
-  const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+  const [selectedNode, setSelectedNode] = useState<Node<NodeData> | null>(null);
   const [nodeDialogOpen, setNodeDialogOpen] = useState(false);
   const [newNodeData, setNewNodeData] = useState<NodeData>({
     label: '',
     category: 'primary',
     size: 'medium',
   });
+  const [loading, setLoading] = useState(false);
+  const [timelineData, setTimelineData] = useState<any[]>([]);
   
   // ReactFlow utils
   const reactFlowInstance = useReactFlow();
@@ -82,7 +93,7 @@ const Visualizer: React.FC = () => {
   // Handle node selection
   const onNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
-      setSelectedNode(node);
+      setSelectedNode(node as Node<NodeData>);
     },
     []
   );
@@ -172,13 +183,68 @@ const Visualizer: React.FC = () => {
           });
         });
         break;
+        
+      case 'timeline':
+        // Apply timeline layout
+        setNodes((nds) => {
+          // Sort nodes by date if available in metadata
+          const sortedNodes = [...nds].sort((a, b) => {
+            const dateA = a.data?.metadata?.date ? new Date(a.data.metadata.date).getTime() : 0;
+            const dateB = b.data?.metadata?.date ? new Date(b.data.metadata.date).getTime() : 0;
+            return dateA - dateB;
+          });
+          
+          return sortedNodes.map((node, i) => {
+            return {
+              ...node,
+              position: {
+                x: 100 + i * 200,
+                y: 300 + (i % 2 === 0 ? -100 : 100), // Alternate above and below the line
+              },
+            };
+          });
+        });
+        
+        // Generate timeline connections
+        setEdges((eds) => {
+          // First remove any existing timeline edges
+          const filteredEdges = eds.filter(e => e.type !== 'timeline');
+          
+          // Get sorted nodes for timeline connections
+          const sortedNodes = [...nodes].sort((a, b) => {
+            const dateA = a.data?.metadata?.date ? new Date(a.data.metadata.date).getTime() : 0;
+            const dateB = b.data?.metadata?.date ? new Date(b.data.metadata.date).getTime() : 0;
+            return dateA - dateB;
+          });
+          
+          // Create chronological connections
+          const timelineEdges: Edge[] = [];
+          for (let i = 0; i < sortedNodes.length - 1; i++) {
+            timelineEdges.push({
+              id: `timeline-${sortedNodes[i].id}-${sortedNodes[i+1].id}`,
+              source: sortedNodes[i].id,
+              target: sortedNodes[i+1].id,
+              type: 'timeline',
+              animated: true,
+              markerEnd: {
+                type: MarkerType.ArrowClosed,
+              },
+              data: {
+                label: 'chronological'
+              }
+            });
+          }
+          
+          return [...filteredEdges, ...timelineEdges];
+        });
+        break;
     }
     
     toast({
       title: "Layout Updated",
       description: `Applied ${layout} layout to the visualization.`,
     });
-  }, [edges, setNodes, toast]);
+  }, [edges, nodes, setEdges, setNodes, toast]);
   
   // Zoom controls
   const zoomIn = useCallback(() => {
@@ -206,7 +272,8 @@ const Visualizer: React.FC = () => {
     const id = `node-${nodes.length + 1}`;
     const newNode = {
       id,
-      type: 'concept',
+      type: newNodeData.category === 'event' ? 'event' : 
+            newNodeData.category === 'person' ? 'person' : 'concept',
       position: {
         x: Math.random() * 800 - 400,
         y: Math.random() * 600 - 300,
@@ -264,7 +331,7 @@ const Visualizer: React.FC = () => {
     });
   }, [nodes, edges, toast]);
   
-  // Mock functions for toolbar actions
+  // Search
   const toggleSearch = useCallback(() => {
     toast({
       title: "Search",
@@ -272,6 +339,7 @@ const Visualizer: React.FC = () => {
     });
   }, [toast]);
   
+  // Filter
   const toggleFilter = useCallback(() => {
     toast({
       title: "Filter",
@@ -279,12 +347,187 @@ const Visualizer: React.FC = () => {
     });
   }, [toast]);
   
+  // Share
   const shareVisualization = useCallback(() => {
     toast({
       title: "Share",
       description: "Share functionality would be implemented here.",
     });
   }, [toast]);
+  
+  // Fetch historical data
+  const fetchHistoricalData = useCallback(async () => {
+    setLoading(true);
+    
+    try {
+      // Fetch timelines
+      const { data: timelines, error: timelinesError } = await supabase
+        .from('timelines')
+        .select('*');
+        
+      if (timelinesError) throw timelinesError;
+      
+      // Fetch timeline events
+      const { data: events, error: eventsError } = await supabase
+        .from('timeline_events')
+        .select('*');
+        
+      if (eventsError) throw eventsError;
+      
+      setTimelineData({ timelines, events });
+      
+      // Call the Supabase Edge Function to process the data with Gemini
+      const { data, error } = await supabase.functions.invoke('process-historical-data', {
+        body: { timelines, events },
+      });
+      
+      if (error) throw error;
+      
+      if (data && data.nodes && data.edges) {
+        setNodes(data.nodes);
+        setEdges(data.edges);
+        
+        toast({
+          title: "Historical Data Visualized",
+          description: "Your historical data has been processed and visualized using Gemini AI.",
+        });
+      }
+      
+    } catch (error) {
+      console.error('Error fetching historical data:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch and process historical data. Please try again.",
+        variant: "destructive",
+      });
+      
+      // Fallback to generating a simple historical visualization
+      generateSimpleHistoricalGraph();
+    } finally {
+      setLoading(false);
+    }
+  }, [setEdges, setNodes, toast]);
+  
+  // Generate simple historical graph from available data
+  const generateSimpleHistoricalGraph = useCallback(() => {
+    try {
+      // Create nodes and edges from timeline data
+      if (!timelineData.events) return;
+      
+      const generatedNodes: Node[] = [];
+      const generatedEdges: Edge[] = [];
+      
+      // Create timeline nodes
+      if (timelineData.timelines) {
+        timelineData.timelines.forEach((timeline: any, index: number) => {
+          generatedNodes.push({
+            id: `timeline-${timeline.id}`,
+            type: 'concept',
+            position: { x: 100, y: 100 + index * 200 },
+            data: {
+              id: `timeline-${timeline.id}`,
+              label: timeline.title || 'Timeline',
+              description: timeline.description || '',
+              category: 'primary',
+              size: 'large'
+            }
+          });
+        });
+      }
+      
+      // Create event nodes
+      timelineData.events.forEach((event: any, index: number) => {
+        const eventDate = event.date ? new Date(event.date) : null;
+        const formattedDate = eventDate ? eventDate.toLocaleDateString() : '';
+        
+        generatedNodes.push({
+          id: `event-${event.id}`,
+          type: 'event',
+          position: { x: 400 + (index % 3) * 200, y: 100 + Math.floor(index / 3) * 150 },
+          data: {
+            id: `event-${event.id}`,
+            label: event.title || 'Event',
+            description: event.description || '',
+            category: 'event',
+            size: 'medium',
+            metadata: {
+              date: formattedDate,
+              category: event.category || 'historical'
+            }
+          }
+        });
+        
+        // Connect events to their timelines
+        if (event.timeline_id) {
+          generatedEdges.push({
+            id: `edge-timeline-${event.timeline_id}-event-${event.id}`,
+            source: `timeline-${event.timeline_id}`,
+            target: `event-${event.id}`,
+            type: 'timeline',
+            animated: true,
+            markerEnd: {
+              type: MarkerType.ArrowClosed
+            },
+            data: {
+              label: 'contains'
+            }
+          });
+        }
+      });
+      
+      // Connect events chronologically within the same timeline
+      const eventsByTimeline: Record<string, any[]> = {};
+      
+      timelineData.events.forEach((event: any) => {
+        if (!event.timeline_id) return;
+        
+        if (!eventsByTimeline[event.timeline_id]) {
+          eventsByTimeline[event.timeline_id] = [];
+        }
+        
+        eventsByTimeline[event.timeline_id].push(event);
+      });
+      
+      // Sort events by date and create chronological connections
+      Object.values(eventsByTimeline).forEach((timelineEvents) => {
+        timelineEvents.sort((a, b) => {
+          const dateA = a.date ? new Date(a.date).getTime() : 0;
+          const dateB = b.date ? new Date(b.date).getTime() : 0;
+          return dateA - dateB;
+        });
+        
+        for (let i = 0; i < timelineEvents.length - 1; i++) {
+          generatedEdges.push({
+            id: `edge-chrono-${timelineEvents[i].id}-${timelineEvents[i+1].id}`,
+            source: `event-${timelineEvents[i].id}`,
+            target: `event-${timelineEvents[i+1].id}`,
+            type: 'dashed',
+            animated: true,
+            data: {
+              label: 'followed by'
+            }
+          });
+        }
+      });
+      
+      if (generatedNodes.length > 0) {
+        setNodes(generatedNodes);
+        setEdges(generatedEdges);
+        
+        toast({
+          title: "Historical Data Visualized",
+          description: "Your historical timeline data has been visualized.",
+        });
+        
+        // Apply timeline layout
+        setTimeout(() => {
+          changeLayout('timeline');
+        }, 500);
+      }
+    } catch (error) {
+      console.error('Error generating simple historical graph:', error);
+    }
+  }, [timelineData, setNodes, setEdges, toast, changeLayout]);
   
   // Apply dark mode on component mount if needed
   useEffect(() => {
@@ -329,6 +572,27 @@ const Visualizer: React.FC = () => {
           size={1}
           style={{ backgroundColor: darkMode ? "#111827" : "#f8fafc" }}
         />
+        
+        {/* Historical Data Panel */}
+        <Panel position="top-left" className="p-2 bg-white/90 dark:bg-gray-800/90 rounded-md shadow-md">
+          <div className="flex flex-col space-y-2">
+            <h3 className="text-sm font-medium">Historical Data</h3>
+            <Button 
+              size="sm" 
+              onClick={fetchHistoricalData}
+              disabled={loading}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                'Visualize Historical Data'
+              )}
+            </Button>
+          </div>
+        </Panel>
       </ReactFlow>
       
       <ControlPanel
@@ -405,6 +669,9 @@ const Visualizer: React.FC = () => {
                     <SelectItem value="warning">Warning</SelectItem>
                     <SelectItem value="danger">Danger</SelectItem>
                     <SelectItem value="info">Info</SelectItem>
+                    <SelectItem value="event">Event</SelectItem>
+                    <SelectItem value="person">Person</SelectItem>
+                    <SelectItem value="place">Place</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -426,6 +693,24 @@ const Visualizer: React.FC = () => {
                 </Select>
               </div>
             </div>
+            
+            {newNodeData.category === 'event' && (
+              <div className="space-y-2">
+                <Label htmlFor="node-date">Date (Optional)</Label>
+                <Input 
+                  id="node-date"
+                  type="date"
+                  onChange={(e) => setNewNodeData({
+                    ...newNodeData,
+                    metadata: {
+                      ...newNodeData.metadata,
+                      date: e.target.value
+                    }
+                  })}
+                  placeholder="Select date"
+                />
+              </div>
+            )}
           </div>
           
           <div className="flex justify-end space-x-2">
