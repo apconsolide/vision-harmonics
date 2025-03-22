@@ -1,11 +1,10 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { 
   getBezierPath, 
   EdgeProps, 
   BaseEdge, 
   EdgeLabelRenderer,
-  getSmoothStepPath,
-  getMarkerEnd
+  getSmoothStepPath
 } from '@xyflow/react';
 
 // Common label component to reduce duplication
@@ -87,9 +86,9 @@ const DashedEdge = ({
   data,
   selected,
   animated = true,
-  markerEnd: propMarkerEnd,
+  markerEnd,
 }) => {
-  const [edgePath, labelX, labelY] = getBezierPath({
+  const [edgePath] = getBezierPath({
     sourceX,
     sourceY,
     sourcePosition,
@@ -98,13 +97,6 @@ const DashedEdge = ({
     targetY,
     curvature: data?.curvature || 0.25
   });
-  
-  const markerEnd = useMemo(() => {
-    return getMarkerEnd(propMarkerEnd, { 
-      color: style?.stroke || '#555', 
-      strokeWidth: style?.strokeWidth
-    });
-  }, [propMarkerEnd, style?.stroke, style?.strokeWidth]);
   
   const dashAnimation = animated ? {
     animation: 'dash 15s linear infinite',
@@ -163,7 +155,7 @@ const GlowingEdge = ({
   style = {},
   data,
   selected,
-  markerEnd: propMarkerEnd,
+  markerEnd,
 }) => {
   const [edgePath] = getSmoothStepPath({
     sourceX,
@@ -182,13 +174,6 @@ const GlowingEdge = ({
   // Calculate glow intensity based on data
   const glowColor = selected ? selectedColor : color;
   const glowSize = Math.max(3, Math.min(10, intensity * 5));
-  
-  const markerEnd = useMemo(() => {
-    return getMarkerEnd(propMarkerEnd, { 
-      color: selected ? selectedColor : color,
-      strokeWidth: style?.strokeWidth
-    });
-  }, [propMarkerEnd, style?.strokeWidth, color, selected]);
 
   // Apply proper shadows for glow effect
   const edgeStyle = {
@@ -242,7 +227,7 @@ const TimelineEdge = ({
   style = {},
   data,
   selected,
-  markerEnd: propMarkerEnd,
+  markerEnd,
 }) => {
   // Timeline edges using orthogonal paths for clearer presentation
   const [edgePath] = getSmoothStepPath({
@@ -276,13 +261,6 @@ const TimelineEdge = ({
     default:
       strokeDasharray = '8 4';
   }
-
-  const markerEnd = useMemo(() => {
-    return getMarkerEnd(propMarkerEnd, { 
-      color: selected ? selectedColor : color,
-      strokeWidth: style?.strokeWidth || 3
-    });
-  }, [propMarkerEnd, color, selected]);
 
   const timeSpan = data?.timeSpan;
   const labelContent = timeSpan ? 
@@ -344,8 +322,8 @@ const BidirectionalEdge = ({
   style = {},
   data,
   selected,
-  markerEnd: propMarkerEnd,
-  markerStart: propMarkerStart
+  markerEnd,
+  markerStart,
 }) => {
   // Slightly curved path for bidirectional edges
   const [edgePath] = getBezierPath({
@@ -360,18 +338,6 @@ const BidirectionalEdge = ({
 
   const color = style?.stroke || '#6366f1';
   const selectedColor = '#4f46e5';
-  
-  const markerEnd = useMemo(() => {
-    return getMarkerEnd(propMarkerEnd || 'arrow', { 
-      color: selected ? selectedColor : color
-    });
-  }, [propMarkerEnd, color, selected]);
-  
-  const markerStart = useMemo(() => {
-    return getMarkerEnd(propMarkerStart || 'arrow', { 
-      color: selected ? selectedColor : color
-    });
-  }, [propMarkerStart, color, selected]);
 
   return (
     <>
@@ -422,7 +388,7 @@ const GradientEdge = ({
   style = {},
   data,
   selected,
-  markerEnd: propMarkerEnd
+  markerEnd
 }) => {
   const [edgePath] = getBezierPath({
     sourceX,
@@ -437,12 +403,6 @@ const GradientEdge = ({
   const fromColor = data?.fromColor || '#10b981';
   const toColor = data?.toColor || '#3b82f6';
   const gradientId = `gradient-${id}`;
-  
-  const markerEnd = useMemo(() => {
-    return getMarkerEnd(propMarkerEnd, { 
-      color: toColor
-    });
-  }, [propMarkerEnd, toColor]);
 
   return (
     <>
