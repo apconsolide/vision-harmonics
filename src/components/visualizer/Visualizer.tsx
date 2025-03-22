@@ -10,8 +10,6 @@ import {
   Panel,
   MarkerType,
   useReactFlow,
-  Node,
-  Edge
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -22,7 +20,7 @@ import NodeDetailsPanel from './NodeDetailsPanel';
 import Toolbar from './Toolbar';
 import { toast } from '@/components/ui/use-toast';
 import { initialNodes, initialEdges } from './initial-elements';
-import { NodeData, HistoricalData } from '@/types/visualizer';
+import { NodeData, HistoricalData, HistoricalTextInput } from '@/types/visualizer';
 import { supabase } from '@/integrations/supabase/client';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -30,9 +28,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Search } from 'lucide-react';
+import { Loader2, Search, FileText } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { useForm } from 'react-hook-form';
 
-const nodeColor = (node: Node) => {
+const nodeColor = (node: any) => {
   const data = node.data as NodeData;
   switch (data.category) {
     case 'primary':
@@ -67,8 +68,9 @@ const Visualizer: React.FC = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [darkMode, setDarkMode] = useState(false);
-  const [selectedNode, setSelectedNode] = useState<Node<NodeData> | null>(null);
+  const [selectedNode, setSelectedNode] = useState<any | null>(null);
   const [nodeDialogOpen, setNodeDialogOpen] = useState(false);
+  const [textInputDialogOpen, setTextInputDialogOpen] = useState(false);
   const [newNodeData, setNewNodeData] = useState<NodeData>({
     label: '',
     category: 'primary',
@@ -78,6 +80,16 @@ const Visualizer: React.FC = () => {
   const [historicalData, setHistoricalData] = useState<HistoricalData>({ timelines: [], events: [] });
   const [searchText, setSearchText] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  
+  // React Hook Form
+  const textInputForm = useForm<HistoricalTextInput>({
+    defaultValues: {
+      text: '',
+      title: '',
+      era: '',
+      context: '',
+    }
+  });
   
   // ReactFlow utils
   const reactFlowInstance = useReactFlow();
@@ -95,8 +107,8 @@ const Visualizer: React.FC = () => {
   
   // Handle node selection
   const onNodeClick = useCallback(
-    (_: React.MouseEvent, node: Node) => {
-      setSelectedNode(node as Node<NodeData>);
+    (_: React.MouseEvent, node: any) => {
+      setSelectedNode(node);
     },
     []
   );
@@ -374,6 +386,50 @@ const Visualizer: React.FC = () => {
     });
   }, [setNodes, toast]);
   
+  // Open text input form
+  const openTextInputForm = useCallback(() => {
+    setTextInputDialogOpen(true);
+  }, []);
+  
+  // Process text input
+  const processTextInput = useCallback(async (data: HistoricalTextInput) => {
+    setLoading(true);
+    setTextInputDialogOpen(false);
+    
+    try {
+      // Call the Supabase Edge Function to process the data with Gemini
+      const { data: responseData, error } = await supabase.functions.invoke('process-historical-data', {
+        body: { 
+          timelines: [], 
+          events: [],
+          userText: data.text
+        },
+      });
+      
+      if (error) throw error;
+      
+      if (responseData && responseData.nodes && responseData.edges) {
+        setNodes(responseData.nodes);
+        setEdges(responseData.edges);
+        
+        toast({
+          title: "Text Analysis Complete",
+          description: "Your historical text has been analyzed and visualized.",
+        });
+      }
+      
+    } catch (error) {
+      console.error('Error analyzing text:', error);
+      toast({
+        title: "Error",
+        description: "Failed to analyze text. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [setEdges, setNodes, toast]);
+  
   // Filter
   const toggleFilter = useCallback(() => {
     toast({
@@ -630,24 +686,38 @@ const Visualizer: React.FC = () => {
           </Panel>
         )}
         
-        {/* Historical Data Panel */}
+        {/* History Input Panel */}
         <Panel position="top-left" className="p-2 bg-white/90 dark:bg-gray-800/90 rounded-md shadow-md">
           <div className="flex flex-col space-y-2">
-            <h3 className="text-sm font-medium">Historical Data</h3>
-            <Button 
-              size="sm" 
-              onClick={fetchHistoricalData}
-              disabled={loading}
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                'Visualize Historical Data'
-              )}
-            </Button>
+            <h3 className="text-sm font-medium">Historical Analysis</h3>
+            <div className="flex space-x-2">
+              <Button 
+                size="sm" 
+                onClick={fetchHistoricalData}
+                disabled={loading}
+                className="flex-1"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  'Use Database Data'
+                )}
+              </Button>
+              
+              <Button
+                size="sm"
+                onClick={openTextInputForm}
+                disabled={loading}
+                variant="outline"
+                className="flex-1"
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                Input Text
+              </Button>
+            </div>
           </div>
         </Panel>
       </ReactFlow>
@@ -677,6 +747,7 @@ const Visualizer: React.FC = () => {
         onFullscreen={toggleFullscreen}
       />
       
+      {/* New Node Dialog */}
       <Dialog open={nodeDialogOpen} onOpenChange={setNodeDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -774,6 +845,110 @@ const Visualizer: React.FC = () => {
             <Button variant="outline" onClick={() => setNodeDialogOpen(false)}>Cancel</Button>
             <Button onClick={handleCreateNode} disabled={!newNodeData.label}>Create Node</Button>
           </div>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Text Input Dialog */}
+      <Dialog open={textInputDialogOpen} onOpenChange={setTextInputDialogOpen}>
+        <DialogContent className="sm:max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Input Historical Text</DialogTitle>
+            <DialogDescription>
+              Paste or type historical text to visualize key entities and relationships.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <Form {...textInputForm}>
+            <form onSubmit={textInputForm.handleSubmit(processTextInput)} className="space-y-4 py-4">
+              <FormField
+                control={textInputForm.control}
+                name="title"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Title (Optional)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g., World War II Overview" {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      A title for your historical text.
+                    </FormDescription>
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={textInputForm.control}
+                name="text"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Historical Text</FormLabel>
+                    <FormControl>
+                      <Textarea 
+                        placeholder="Paste or type historical text here..."
+                        className="min-h-[200px]"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Text will be analyzed to identify entities, events, people, and relationships.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={textInputForm.control}
+                  name="era"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Historical Era (Optional)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., 20th Century, Medieval" {...field} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={textInputForm.control}
+                  name="context"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Additional Context (Optional)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., Military History, Cultural Revolution" {...field} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+              </div>
+              
+              <div className="flex justify-end space-x-2 pt-4">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => setTextInputDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  type="submit" 
+                  disabled={!textInputForm.getValues().text.trim() || loading}
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    'Analyze & Visualize'
+                  )}
+                </Button>
+              </div>
+            </form>
+          </Form>
         </DialogContent>
       </Dialog>
     </div>

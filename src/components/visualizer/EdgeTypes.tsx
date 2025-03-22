@@ -57,7 +57,7 @@ const DashedEdge: React.FC<EdgeProps> = ({
             }}
             className="nodrag nopan"
           >
-            {data.label}
+            {data.label as React.ReactNode}
           </div>
         </EdgeLabelRenderer>
       )}
@@ -113,7 +113,7 @@ const GlowingEdge: React.FC<EdgeProps> = ({
             }}
             className="nodrag nopan"
           >
-            {data.label}
+            {data.label as React.ReactNode}
           </div>
         </EdgeLabelRenderer>
       )}
@@ -172,7 +172,7 @@ const TimelineEdge: React.FC<EdgeProps> = ({
             }}
             className="nodrag nopan"
           >
-            {data.label}
+            {data.label as React.ReactNode}
           </div>
         </EdgeLabelRenderer>
       )}

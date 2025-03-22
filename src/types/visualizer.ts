@@ -53,4 +53,12 @@ export interface Timeline {
 export interface HistoricalData {
   timelines: Timeline[];
   events: TimelineEvent[];
+  userText?: string; // Add user text field for free-form text input
+}
+
+export interface HistoricalTextInput {
+  text: string;
+  title?: string; 
+  context?: string;
+  era?: string;
 }
